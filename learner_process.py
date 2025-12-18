@@ -16,6 +16,16 @@ def learner_process(rollout_queue, shared_weights_dict, stop_event, n_actions, f
 
     gym.register_envs(ale_py)
     env = gym.make("PongNoFrameskip-v4")
+
+    env = gym.wrappers.AtariPreprocessing(
+    env, 
+    noop_max=30,
+    frame_skip=4,
+    screen_size=84,
+    grayscale_obs=True,
+    )
+    env = gym.wrappers.FrameStackObservation(env, 4)
+    
     model = PPOActorCritic(n_actions).to(device)
     learner = PPOLearning(model, env, device)
 
@@ -43,13 +53,17 @@ def learner_process(rollout_queue, shared_weights_dict, stop_event, n_actions, f
             tac = time.time()
             iteration += 1
 
+            iterations = 0
+            for i in range(4):
+                iterations += shared_weights_dict[f"Worker{i}"]
+
             log_entry = [
                 tac - tic, 
-                iteration * len(r), 
+                iterations,
                 iteration // frequency, 
                 total_reward, 
                 rollout_queue.qsize(),
-                version
+                version // frequency
             ]
             results_queue.put(log_entry)
             

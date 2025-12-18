@@ -26,8 +26,21 @@ def worker_process(worker_id, rollout_queue, shared_weights_dict, stop_event, n_
     
     gym.register_envs(ale_py)
     env = gym.make("PongNoFrameskip-v4")
+
+    env = gym.wrappers.AtariPreprocessing(
+    env, 
+    noop_max=30,
+    frame_skip=4,
+    screen_size=84,
+    grayscale_obs=True,
+    )
+    env = gym.wrappers.FrameStackObservation(env, 4)
+
+    
     model = PPOActorCritic(n_states).to(device)
     learner = PPOLearning(model, env, device)
+
+    shared_weights_dict[f"Worker{worker_id}"] = 0
 
     print(f"[Worker {worker_id}] Started.")
     local_version = -1
@@ -46,7 +59,7 @@ def worker_process(worker_id, rollout_queue, shared_weights_dict, stop_event, n_
             pass
 
         try:
-            rollout = learner.create_rollout(length=2048)
+            rollout = learner.create_rollout(shared_weights_dict, worker_id, length=2048)
         except Exception as e:
             print(f"[Worker {worker_id}] Error in rollout: {e}")
             break

@@ -20,13 +20,14 @@ class PPOLearning():
         self.device = device
         self.version = 0
 
-    def create_rollout(self, length = 1024):
+    def create_rollout(self, dictionary, worker_id, length = 1024):
         rollout = RolloutBuffer(device=self.device)
         obs, info = self.env.reset()
 
         with torch.no_grad():
             for _ in range(length):
-                obs_tensor = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0).permute([0, 3, 1, 2]) / 255.0
+                dictionary[f"Worker{worker_id}"] += 1
+                obs_tensor = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)/ 255.0
 
                 logits, value = self.actorcritic(obs_tensor)
                 value = float(value.squeeze(0).cpu().item())
@@ -54,7 +55,7 @@ class PPOLearning():
                 if done:
                     obs, info = self.env.reset()
 
-            obs_tensor = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0).permute([0, 3, 1, 2]) / 255.0
+            obs_tensor = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)/ 255.0
 
             _, last_value = self.actorcritic(obs_tensor)
             rollout.finish(float(last_value.squeeze(0).cpu().item()))
@@ -134,7 +135,7 @@ class PPOLearning():
                     states = states.to(self.device).float()
                 else:
                     states = torch.tensor(states, dtype=torch.float32, device=self.device)
-                states = torch.tensor(states, dtype=torch.float32, device=self.device).permute([0, 3, 1, 2]) / 255.0
+                states = torch.tensor(states, dtype=torch.float32, device=self.device) / 255.0
 
                 actions = actions.to(self.device).long().squeeze(-1) if actions.dim() > 1 else actions.to(self.device).long()
                 gae = gae.to(self.device).float().squeeze(-1) if gae.dim() > 1 else gae.to(self.device).float()
@@ -172,36 +173,7 @@ class PPOLearning():
                 total_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.actorcritic.parameters(), max_norm=0.5)
                 optimizer.step()
-
-    def train_actor_critic(self, steps = 40, lr = 3e-4, n_epochs = 4,
-                           n_rollout = 1024, gamma = 0.99, delta = 0.95,
-                           clip_eps = 0.2, batch_size = 256):
-        optimizer = torch.optim.Adam(self.actorcritic.parameters(), lr=lr)
-
-        for i in tqdm(range(steps)):
-            rollout = self.create_rollout(length=n_rollout)
-            print('rollout collect')
-
-            self.one_epoch_of_learning(rollout,
-                                       optimizer,
-                                       batch_size=batch_size,
-                                       n_epochs=n_epochs,
-                                       gamma=gamma, delta=delta,
-                                       clip_eps=clip_eps)
-
-            test_reward = 0.0
-            obs, _ = self.env.reset()
-            done = False
-            while not done:
-                with torch.no_grad():
-                    s = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0).permute([0, 3, 1, 2]) / 255.0
-                    logits, _ = self.actorcritic(s)
-                    a = int(torch.argmax(logits, dim=-1).cpu().item())
-                obs, r, term, trunc, _ = self.env.step(a)
-                test_reward += float(r)
-                done = term or trunc
-
-            print(f"Iteration {i+1}/{steps} | Test reward = {test_reward:.1f}")
+     
     
     def testing(self):
         reward = 0
@@ -211,7 +183,7 @@ class PPOLearning():
             done = False
             while not done:
                 with torch.no_grad():
-                    s = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0).permute([0, 3, 1, 2]) / 255.0
+                    s = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
                     logits, _ = self.actorcritic(s)
                     a = int(torch.argmax(logits, dim=-1).cpu().item())
                 obs, r, term, trunc, _ = self.env.step(a)

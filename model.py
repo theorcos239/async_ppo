@@ -3,7 +3,7 @@ from torch import nn
 import numpy as np
 
 class PPOActorCritic(nn.Module):
-    def __init__(self, n_actions, stack_size=3):
+    def __init__(self, n_actions, stack_size=4):
         super().__init__()
 
         self.conv = nn.Sequential(
@@ -14,7 +14,7 @@ class PPOActorCritic(nn.Module):
             nn.Conv2d(64, 64, 3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(22528, 512),
+            nn.Linear(3136, 512),
             nn.ReLU()
         )
 
@@ -28,7 +28,9 @@ class PPOActorCritic(nn.Module):
             if isinstance(module, (nn.Conv2d, nn.Linear)):
                 nn.init.orthogonal_(module.weight, np.sqrt(2))
                 nn.init.constant_(module.bias, 0.0)
-
+        
+        nn.init.orthogonal_(self.actor.weight, 0.01)
+        
     def forward(self, x):
         features = self.conv(x)
         return self.actor(features), self.critic(features)
